@@ -550,7 +550,7 @@ function buildScreen(state) {
     case 'eigyo_alert':
       return `<div class="screen">
         <p style="font-size:22px; font-weight:bold; color:#f0c040; text-align:center; line-height:1.6;">
-          営業時間になりました
+          営業時間終了になりました
         </p>
         <p style="font-size:16px; color:#ccc; text-align:center;">このまま居座り続けますか？</p>
         <div style="display:flex; gap:16px; margin-top:8px;">
