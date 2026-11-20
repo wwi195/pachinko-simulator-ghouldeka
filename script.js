@@ -207,7 +207,8 @@ function handleRushStart() {
     }
   } else {
     addLog(`電サポ外れ（残り${game.rushRemaining}回）`);
-    setState('rush_miss');
+    // 電サポ中の外れは「外れ」画面を出さない（電サポ終了のときだけ終了画面を出す）
+    if (game.rushRemaining > 0) setState('rush_idle'); else setState('rush_miss');
   }
 }
 
