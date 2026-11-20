@@ -21,6 +21,8 @@ const game = {
   pending: {},
   rushStats: resetRushStats(),
   eigyoAlertShown: false,
+  hitHistory: [],     // 大当たり履歴 [{games, kind, chain}]（新しい順。chain=null はRUSH結果待ち、0はRUSHなし）
+  lastAnyHitTotal: 0, // 直前の大当たり（チャージ・図柄揃い）時点の総回転数
   log: [],
 };
 
@@ -91,6 +93,7 @@ function handleStart() {
     setState('enzoku');
   } else if (result === 'charge') {
     game.chargeCount++;
+    recordHit('charge', 0);
     addBalls(280);
     addLog(`${interval}回転でチャージ ＋280球`, 'charge');
     setState('charge_result');
@@ -119,6 +122,7 @@ function autoSpin(count) {
       return;
     } else if (result === 'charge') {
       game.chargeCount++;
+      recordHit('charge', 0);
       addBalls(280);
       addLog(`${interval}回転でチャージ ＋280球`, 'charge');
     }
@@ -141,6 +145,7 @@ function handleZugarVibun() {
   const balls = isPremium ? 7000 : 2800;
   addBalls(balls);
   game.zugarCount++;
+  recordHit('zugar', isPremium ? null : 0);
   game.currentSpins  = 0;
   game.lastHitSpins  = game.totalSpins;
   game.pending = { premium: isPremium };
@@ -158,6 +163,7 @@ function handleAfterZugar() {
     game.mode = 'rush';
     game.rushRemaining = 5;
     game.rushStats = resetRushStats();
+    game.rushStats.chainCount = 1; // 初当たりを1連チャン目として数える（RUSH中1回当たると2連）
     game.rushStats.actualBalls  = 7000;
     game.rushStats.nominalBalls = 7500;
     setState('rush_idle');
@@ -240,6 +246,7 @@ function handleRushMissContinue() {
   if (game.rushRemaining > 0) {
     setState('rush_idle');
   } else {
+    setLatestHitChain(game.rushStats.chainCount);
     setState('rush_result');
   }
 }
@@ -284,6 +291,8 @@ function resetGame() {
   game.pending         = {};
   game.rushStats       = resetRushStats();
   game.eigyoAlertShown = false;
+  game.hitHistory      = [];
+  game.lastAnyHitTotal = 0;
   game.log             = [];
   render();
 }
@@ -295,11 +304,51 @@ function setState(state) {
   render();
 }
 
+// ---- 大当たり履歴グラフ ----
+function recordHit(kind, chain) {
+  const games = game.totalSpins - game.lastAnyHitTotal;
+  game.lastAnyHitTotal = game.totalSpins;
+  game.hitHistory.unshift({ games, kind, chain });
+}
+function setLatestHitChain(chain) {
+  const last = game.hitHistory[0];
+  if (last && last.chain === null) last.chain = chain;
+}
+
+const HIST_BLOCK = 100;
+const HIST_MAX_BLOCKS = 7;
+function renderHitGraph() {
+  const el = document.getElementById('hist-cols');
+  if (!el) return;
+  const col = (cls, games, label, idx) => {
+    const blocks = Math.min(HIST_MAX_BLOCKS, Math.max(1, Math.ceil(games / HIST_BLOCK)));
+    const more = games >= HIST_BLOCK * HIST_MAX_BLOCKS ? '<div class="hist-more">▲</div>' : '';
+    return `<div class="hist-col ${cls}">
+      <div class="hist-g">${games}</div>${more}
+      ${'<div class="hist-block"></div>'.repeat(blocks)}
+      <div class="hist-type">${label}</div>
+      <div class="hist-idx">${idx}</div>
+    </div>`;
+  };
+  let html = col('now', game.totalSpins - game.lastAnyHitTotal, '現在', '');
+  game.hitHistory.forEach((h, i) => {
+    let cls, label;
+    if (h.chain === null) { cls = 'pending'; label = '…'; }
+    else if (h.chain >= 1) { cls = h.chain >= 10 ? 'big-chain' : 'rush'; label = `${h.chain}連`; }
+    else if (h.kind === 'charge') { cls = 'charge'; label = 'チャージ'; }
+    else { cls = 'zugar'; label = '図柄'; }
+    html += col(cls, h.games, label, i + 1);
+  });
+  if (game.hitHistory.length === 0) html += '<div class="hist-empty">まだ大当たりがありません</div>';
+  el.innerHTML = html;
+}
+
 function render() {
   renderHeader();
   renderModeBadge();
   renderMainScreen();
   renderRushStats();
+  renderHitGraph();
 }
 
 function renderHeader() {
